@@ -1,8 +1,11 @@
 import unittest
 from opticalct.opticalct import Dataset
+from pathlib import Path
 import numpy as np
 import pytest
 import os
+import re
+
 
 class TestOpticalCT(unittest.TestCase):
 
@@ -24,8 +27,8 @@ class TestOpticalCT(unittest.TestCase):
     def test_dataset_load_lemon(self):
         data = Dataset()
         data.load('data/lemon')
-        assert len(data.projections) == 200
-        assert data.projections.shape == (200, 588, 878)
+        assert len(data.projections) == 199
+        assert data.projections.shape == (199, 588, 878)
 
     def test_dataset_ctor_calls_load(self):
         data = Dataset()
@@ -42,7 +45,7 @@ class TestOpticalCT(unittest.TestCase):
     def test_dataset_load_scaled(self):
         data = Dataset()
         data.load('data/lemon', scale=0.5)
-        assert data.projections.shape == (200, 294, 439)
+        assert data.projections.shape == (199, 294, 439)
 
     def test_dataset_load_small_matrix(self):
         data = Dataset()
@@ -68,6 +71,21 @@ class TestOpticalCT(unittest.TestCase):
             [[0, 106, 94, 51, 0], [0, 106, 94, 51, 0]],
             [[0, 74, 130, 22, 25], [0, 74, 130, 22, 25]]], dtype='uint8')).all()
 
-    def test_dataset_load_check_frame_order(self):
+    def test_dataset_get_files(self):
         data = Dataset()
-        data.load('data/lemon')
+
+        Path('/tmp/opticalct_standardNumbers').mkdir(parents=True, exist_ok=True)
+        Path('/tmp/opticalct_leadingZeros').mkdir(parents=True, exist_ok=True)
+
+        data.dir = Path('/tmp/opticalct_leadingZeros')
+        for i in range(1, 101):
+            Path(str(data.dir) + '/file' + str(i).zfill(3) + '.jpg').touch(exist_ok=True)
+        data.get_files()
+        for f in data.files:
+            assert re.search('[0-9][0-9][0-9]', f.name) != None
+
+        data.dir = Path('/tmp/opticalct_standardNumbers')
+        for i in range(1, 101):
+            Path(str(data.dir) + '/file' + str(i) + '.jpg').touch(exist_ok=True)
+        data.get_files()
+        assert data.files[1].name == 'file2.jpg'
