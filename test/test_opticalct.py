@@ -2,6 +2,7 @@ import unittest
 from opticalct.opticalct import Dataset
 from pathlib import Path
 import numpy as np
+import logging
 import pytest
 import os
 import re
@@ -110,6 +111,18 @@ class TestOpticalCT(unittest.TestCase):
         data.load('data/small_matrix/projections', format='*.tif')
 
     def test_compute_volume(self):
-        data = Dataset('data/lemon', format='*.jpg', scale=0.1)
+        data = Dataset('data/small_matrix/projections', format='*.tif')
         data.compute_sinogram()
         data.compute_volume()
+        ground_truth = np.array([[[0, 0, 184, 0, 0],
+                                [0, 70, 189, 59, 0],
+                                [43,106, 0, 85, 0],
+                                [0, 86, 0, 89, 0],
+                                [0, 0, 145, 0, 0]],
+                                [[0, 0, 184, 0, 0],
+                                [0, 70, 189, 59, 0],
+                                [43, 106, 0, 85, 0],
+                                [0, 86, 0, 89, 0],
+                                [0, 0, 145, 0, 0]]],
+                                dtype='uint8')
+        assert data.volume.all() == ground_truth.all()

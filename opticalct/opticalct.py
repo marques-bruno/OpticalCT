@@ -1,7 +1,7 @@
 """The OpticalCT module."""
 from pathlib import Path
 import cv2
-from matplotlib import projections
+from skimage.transform import iradon
 import numpy as np
 import re
 import logging
@@ -145,4 +145,23 @@ class Dataset:
             self.sinogram[i] = np.rot90(self.projections[:, i])
 
     def compute_volume(self):
-        pass
+        """Compute the filtered backprojection of the images."""
+        # volume shape should be: (nrows,nproj,nproj), or (x, z, z)
+        # or the number of slices in the volume, the number of the
+        # smallest dimension in the sinogram (which should be the number of
+        # projections)
+        shape = list(self.sinogram.shape)
+        shape[2] = shape[1]
+        shape = tuple(shape)
+
+        # Iradon input  must be floating point values:
+        self.volume = np.empty(shape, self.sinogram.dtype)
+        theta = np.linspace(0., 360., len(self.projections))
+        for i in range(len(self.sinogram)):
+            im = iradon(self.sinogram[i].astype(np.float32) / 255.0, theta)
+            # normalize the grayscale image and convert back to uint8
+            im = im / im.max() * 255
+            self.volume[i] = im / im.max() * 255
+            # crop out histogram where intensity is over 200 (high probability
+            # of reconstruction artifacts)
+            self.volume[i] = np.where(self.volume[i] > 200, 0, self.volume[i])
