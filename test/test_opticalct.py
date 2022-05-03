@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import os
 import re
-
+import cv2
 
 class TestOpticalCT(unittest.TestCase):
 
@@ -89,3 +89,27 @@ class TestOpticalCT(unittest.TestCase):
             Path(str(data.dir) + '/file' + str(i) + '.jpg').touch(exist_ok=True)
         data.get_files()
         assert data.files[1].name == 'file2.jpg'
+
+    def test_compute_sinogram(self):
+        data = Dataset('data/small_matrix/projections', format='*.tif')
+        data.compute_sinogram()
+        assert data.sinogram.shape == (2, 5, 4)
+        sinogram = cv2.imread('data/small_matrix/ground_truth/sinogram.tif',
+                              cv2.IMREAD_UNCHANGED)
+        assert data.sinogram.all() == sinogram.all()
+
+    def test_compute_sinogram_fails_if_projections_not_loaded(self):
+        data = Dataset()
+        with pytest.raises(ValueError):
+            data.compute_sinogram()
+
+    def test_loading_dataset_cleans_sinogram(self):
+        data = Dataset('data/small_matrix/projections',
+                       format='*.tif')
+        data.compute_sinogram()
+        data.load('data/small_matrix/projections', format='*.tif')
+
+    def test_compute_volume(self):
+        data = Dataset('data/lemon', format='*.jpg', scale=0.1)
+        data.compute_sinogram()
+        data.compute_volume()

@@ -1,12 +1,15 @@
 """The OpticalCT module."""
 from pathlib import Path
 import cv2
+from matplotlib import projections
 import numpy as np
 import re
 import logging
 
 
 class Dataset:
+    """Store & manage a dataset"""
+    sinogram = None
     projections = None
     dir = None
     format = '*.jpg'
@@ -14,11 +17,50 @@ class Dataset:
     invert = False
 
     def __init__(self, dir=None, **kwargs):
+        """
+        Create a Dataset loader.
+        
+        :param dir: The path to the directory containing the dataset.
+        If provided, Dataset.load is called
+        :type dir: str, optional
+        :param kwargs scaling ratio to apply to the whole dataset
+        """
         if dir is None:
+            self.cleanup()
             return
         self.load(dir, **kwargs)
 
+    def cleanup(self):
+        """Delete data from object. Keeps settings (format, scale, invert)"""
+        sinogram = None
+        projections = None
+        dir = None
+
     def load(self, dir, **kw):
+        """
+        Load the dataset stored in the given path.
+
+        If needed, images will be converted to single 8-bit channel, grayscale images.
+        scale will be applied if != 1.0 and frames will be inverted (negatives) if
+        invert is True.
+        Images in the directory must be indexed in their filenames, with or without
+         trailing zeroes:
+        - (1,2,3,...,10,11,12,...)
+        - (001,002,...,010,011,...180,181...,999)
+        Both formats are supported. Filename can contain alphabetic characters but
+        numerical characters must only be used for frame indexing.
+
+        :param path: The path to the directory containing the dataset
+        :type path: str
+        :param scale scaling ratio to apply to the whole dataset
+        :type scale: int, optional
+        :param invert: if set to True, load images as negatives: highly
+        attenuated radiations on the detector should appear 'brighter' on a
+        projected image.
+        :type invert: bool
+        """
+        self.cleanup()
+
         self.format = kw.get('format', self.format)
         self.scale = kw.get('scale', self.scale)
         self.invert = kw.get('invert', self.invert)
@@ -29,6 +71,7 @@ class Dataset:
 
         self.get_files()
 
+        # read sample to get shape, depth, channels....
         cvt2gray = cv2.IMREAD_UNCHANGED
         if self.scale != 1.0:
             sample = cv2.resize(
@@ -81,3 +124,25 @@ class Dataset:
                     self.files.append(Path(fname))
         else:
             self.files = sorted(files)
+
+    def compute_sinogram(self):
+        """Compute the sinogram of the loaded dataset."""
+        if self.projections is None:
+            raise ValueError('Cannot compute sinogram, projections not loaded.')
+        
+        # initial shape is (n_projections, nrows, ncols)
+        # The inverse radon transform from skimage expects sinograms where each
+        # column represents one slice (a row in the projection frames) at a
+        # different angle (n_projections).
+        # set must thus concatenate the projections into sinograms
+        # shape (nrows, ncols, nproj)
+
+        p_shape = list(self.projections.shape)
+        s_shape = (p_shape[1], p_shape[2], p_shape[0])
+        self.sinogram = np.empty(s_shape, dtype='uint8')
+
+        for i in range(self.sinogram.shape[0]):
+            self.sinogram[i] = np.rot90(self.projections[:, i])
+
+    def compute_volume(self):
+        pass
