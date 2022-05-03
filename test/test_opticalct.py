@@ -126,3 +126,27 @@ class TestOpticalCT(unittest.TestCase):
                                 [0, 0, 145, 0, 0]]],
                                 dtype='uint8')
         assert data.volume.all() == ground_truth.all()
+
+    def test_save_dataset(self):
+        dir = '/tmp/small_matrix_reconstruction'
+        data = Dataset('data/small_matrix/projections', format='*.tif')
+        data.compute_sinogram()
+        data.compute_volume()
+        p = Path(dir)
+        for f in p.glob('*'):
+            f.unlink()
+        p.rmdir()
+        data.save_volume(dir, format='.tif')
+        p = Path(dir)
+        saved_files = [f for f in p.glob('*.tif')]
+        assert len(saved_files) == len(data.volume)
+
+        p.touch('folder_not_empty.txt')
+        with pytest.raises(OSError):
+            data.save_volume(dir, format='.tif')
+
+    def test_display_sequence(self):
+        data = Dataset('data/lemon', invert=True, scale=0.1)
+        data.compute_sinogram()
+        data.compute_volume()
+        data.display(data.volume, interactive=False, delay=1)

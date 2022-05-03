@@ -5,6 +5,7 @@ from skimage.transform import iradon
 import numpy as np
 import re
 import logging
+import concurrent
 
 
 class Dataset:
@@ -87,7 +88,6 @@ class Dataset:
 
         i = 0
         for f in self.files:
-            logging.warning(str(f))
             if self.scale != 1.0:
                 self.projections[i] = cv2.resize(
                     cv2.imread(str(f), cvt2gray),
@@ -156,12 +156,48 @@ class Dataset:
 
         # Iradon input  must be floating point values:
         self.volume = np.empty(shape, self.sinogram.dtype)
-        theta = np.linspace(0., 360., len(self.projections))
-        for i in range(len(self.sinogram)):
-            im = iradon(self.sinogram[i].astype(np.float32) / 255.0, theta)
-            # normalize the grayscale image and convert back to uint8
-            im = im / im.max() * 255
-            self.volume[i] = im / im.max() * 255
-            # crop out histogram where intensity is over 200 (high probability
-            # of reconstruction artifacts)
-            self.volume[i] = np.where(self.volume[i] > 200, 0, self.volume[i])
+
+        argList = [(self.sinogram[i], np.linspace(0., 360., len(self.projections)),
+                    self.volume, i)
+                   for i in range(len(self.sinogram))]
+
+        def reconstruct_slice(args):
+            """Reconstruct given slice, acquired from thread pool."""
+            sinogram = args[0]
+            theta = args[1]
+            volume = args[2]
+            i = args[3]
+            im = iradon(sinogram.astype(np.float32), theta)
+            volume[i] = im/im.max() * 255
+            volume[i] = np.where(volume[i] > 200, 0, volume[i])
+            logging.warning('processed slice %d', i)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            executor.map(reconstruct_slice, argList)
+
+    def save_volume(self, dir, **kwargs):
+        format = kwargs.get('format', '.jpg')
+        p = Path(dir)
+        Path.mkdir(p, exist_ok=True)
+        if any(p.iterdir()):
+            raise OSError("Dataset.save_volume(): directory " + dir + ' is not empty.')
+        for i in range(len(self.volume)):
+            cv2.imwrite(dir + '/' + str(i) + format, self.volume[i])
+
+    def display(self, collection, **kw):
+        delay = kw.get('delay', 1)
+        interactive = kw.get('interactive', False)
+        left = 81
+        right = 83
+        i = 0
+        while i < len(collection):
+            cv2.imshow('OpticalCT', collection[i])
+            if interactive:
+                k = cv2.waitKey(0)
+                if k == left and i != 0:
+                    i -= 1
+                elif k == right:
+                    i += 1
+            else:
+                cv2.waitKey(delay)
+                i+=1
